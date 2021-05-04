@@ -298,6 +298,7 @@ public class ClothSimulator : MonoBehaviour {
         }
     }
 
+
     private void GenerateCollisionConstraints() {
         for (int i = 0; i < numParticles; i++) {
             for (int j = 0; j < collidableObjects.Length; j++) {

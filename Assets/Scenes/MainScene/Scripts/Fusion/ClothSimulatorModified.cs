@@ -43,7 +43,7 @@ public class ClothSimulatorModified : MonoBehaviour {
     public CollisionMode collisionMode = CollisionMode.PointSamplingActivation;
     public GameObject target;
 
-    // simulation data
+    // Simulation data
     private float nextFrameTime = 0f;
     private Vector3[] positions; 
     private Vector3[] projectedPositions;
@@ -128,11 +128,6 @@ public class ClothSimulatorModified : MonoBehaviour {
         AddDistanceConstraints();
         AddPointConstraints();
         AddBendingConstraints();
-
-        for (int i = 0; i < numParticles; i++) {
-            x[i] = positions[i];
-            projectedX[i] = positions[i];
-        }
 
         // modify positions to world coordinates before calculating constraint restlengths
         for (int i = 0; i < numParticles; i++) {
@@ -402,12 +397,12 @@ public class ClothSimulatorModified : MonoBehaviour {
 
 
     private void GenerateCollisionConstraints() {
-        int counter = 0;
+        //int counter = 0;
         for (int i = 0; i < triangles.Length; i++) {
                 if (!target.activeSelf) continue;
 
                 if (distances[i] >= 0.0001f) {
-                    counter++;
+                    //counter++;
                     continue;
                 }
 
@@ -578,7 +573,7 @@ public class ClothSimulatorModified : MonoBehaviour {
                     }
                 }
         }
-        Debug.Log(counter);
+        //Debug.Log(counter);
     }
 
 

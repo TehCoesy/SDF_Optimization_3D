@@ -3,122 +3,93 @@ using System.Collections.Generic;
 using System;
 using UnityEngine;
 
+public enum Method {FrankWolfe, GradientDescent};
+
 public class SDF_3D : MonoBehaviour
 {
-    // Controls
-    bool m_Started = false;
-
     // gameObject Variables
     MeshFilter m_MeshFilter;
     Mesh m_Mesh;
-    Matrix4x4 localToWorld;
 
     // SDF Variables
-    Vector3 x;
-
-    // Disable showing result if target is too far away
-    float boundDistance = 0;
-    float threshold = 0.2f;
+    Vector3 x1, x2;
+    float distance1, distance2;
     
     // Target Variables
     [SerializeField]
-    public GameObject target;
+    public GameObject target = null;
 
-    private Vector3 targetBounds;
-
-    // Debug tools
+    // Method
     [SerializeField]
-    bool debugVertices = false;
+    public int n = 16;
+    public Method method = Method.FrankWolfe;
+
+
+    private Vector3 targetBounds = Vector3.zero;
+    private Collider targetCollider = null;
+
+    // Others
+    
 
     void Start()
     {
         // Establish gameObject's mesh
-        m_Started = true;
         m_MeshFilter = gameObject.GetComponent<MeshFilter>();
         m_Mesh = m_MeshFilter.mesh;
 
         // Establish target's mesh
         if (target) {
             targetBounds = target.GetComponent<Renderer>().bounds.size;
+            targetCollider = target.GetComponent<Collider>();
         }
-
-        Debug.Log("X: " + targetBounds.x + " Y: "
-        + targetBounds.y + " Z: " + targetBounds.z);
-    }
-
-    // Transform position of a vertex to world space
-    Vector3 WP(Vector3 vertex) {
-        return localToWorld.MultiplyPoint3x4(vertex);
     }
 
     // Distance to a sphere's surface
-    float SDFCircle(Vector3 a, bool neg) {
-        // [TODO]: No handling for different round shapes yet, assuming bounds.x = bounds.y = bounds.z
-        float da = GetLength(a, target.transform.position) - targetBounds.x;
-
-        if (da < 0.0f && neg) return Math.Abs(da);
-        else return da;
+    float SDFCircle(Vector3 a) {
+        float da = (a - target.transform.position).magnitude - targetBounds.x;
+        return Mathf.Abs(da);   
+        //return Mathf.Clamp(da, -1.0f, 1.0f);
     }
 
     // Distance to a box's surface
     // Can be used for a bounding box or a cube mesh
-    float SDFBox(Vector3 a, bool neg) {
-        Vector3 position = target.transform.position;
+    float SDFBox(Vector3 a) {
+        Vector3 p = a - target.transform.position;
+        Vector3 targetBounds = target.GetComponent<Renderer>().bounds.size;
         
-        float left = position.x - targetBounds.x / 2, right = position.x + targetBounds.x / 2;
-        float bottom = position.y - targetBounds.y / 2, top = position.y + targetBounds.y / 2;
-        float back = position.z - targetBounds.z / 2, forward = position.z + targetBounds.z / 2;
+        float left = -targetBounds.x / 2, right = targetBounds.x / 2;
+        float bottom = -targetBounds.y / 2, top = targetBounds.y / 2;
+        float back = -targetBounds.z / 2, forward = targetBounds.z / 2;
 
-        float dx = DistanceAux(a.x, left, right);
-        float dy = DistanceAux(a.y, bottom, top);
-        float dz = DistanceAux(a.z, back, forward);
+        float dx = DistanceAux(p.x, - targetBounds.x / 2, targetBounds.x / 2);
+        float dy = DistanceAux(p.y, - targetBounds.y / 2, targetBounds.y / 2);
+        float dz = DistanceAux(p.z, - targetBounds.z / 2, targetBounds.z / 2);
 
         if (a.x > left && a.x < right && a.y > bottom && a.y < top && a.z > back && a.z < forward) {
-            if (dx < dy && dx < dz) {
-                if (neg) return -dx;
-                return dx;
-            }
-            else if (dy < dx && dy < dz) {
-                if (neg) return -dy;
-                return dy;
-            }
-            else {
-                if (neg) return -dz;
-                return dz;
-            }
+            return Mathf.Min(dx, dy, dz);
         }
-
-        return (float) Math.Sqrt(dx * dx + dy * dy + dz * dz);
+        return Mathf.Sqrt(dx * dx + dy * dy + dz * dz);
     }
 
     float DistanceAux(float x, float min, float max) {
         if (x < min) return min - x;
         else if (x > max) return x - max;
-
-        return Math.Min(x - min, max - x);
+        else return 0.0f;
     }
 
     float SDFLine(Vector3 x, Vector3 a, Vector3 b) {
         return 0.0f;
     }
 
-    // Distance between 2 points
-    float GetLength(Vector3 a, Vector3 b) {
-        float dx = a.x - b.x;
-        float dy = a.y - b.y;
-        float dz = a.z - b.z;
-        return (float) Math.Sqrt(dx * dx + dy * dy + dz * dz);
-    }
-
     private float GetField(Vector3 a) {
-        if (target) {
-            if (target.tag == "Sphere") {
-                return SDFCircle(a, true);
-            } else if (target.tag == "Cube") {
-                return SDFBox(a, true);
+        if (target && targetCollider) {
+            if (targetCollider.GetType() == typeof(SphereCollider)) {
+                return SDFCircle(a);
+            } else if (targetCollider.GetType() == typeof(BoxCollider)) {
+                return SDFBox(a);
             }
         }
-        return 0.0f;
+        return 1.0f;
     }
 
     private Vector3 GetFieldGradient(Vector3 a) {
@@ -136,86 +107,125 @@ public class SDF_3D : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        if (target)
-        localToWorld = transform.localToWorldMatrix;
-
         Vector3[] m_Vertices = m_Mesh.vertices;
         int[] m_Triangles = m_Mesh.triangles;
 
-        Vector3 a = WP(m_Vertices[0]);
-        Vector3 b = WP(m_Vertices[1]);
-        Vector3 c = WP(m_Vertices[2]);
-        Vector3 d = WP(m_Vertices[3]);
+        Vector3 a = transform.TransformPoint(m_Vertices[0]);
+        Vector3 b = transform.TransformPoint(m_Vertices[1]);
+        Vector3 c = transform.TransformPoint(m_Vertices[2]);
+        Vector3 d = transform.TransformPoint(m_Vertices[3]);
 
-        // Search iterations
-        for (int i = 0; i < 32; i++) {
-            // Frank - wolfe
-            Vector3 gradient = GetFieldGradient(x);
-            float da = Vector3.Dot(a, gradient);
-            float db = Vector3.Dot(b, gradient);
-            float dc = Vector3.Dot(c, gradient);
-            float dd = Vector3.Dot(d, gradient);
-                
-            Vector3 s;
+        x1 = (a + b + c) / 3;
+        x2 = (b + c + d) / 3;
 
-            if (da < db && da < dc && da < dd) 
-                s = a;
-            else if (db < da && db < dc && db < dd)
-                s = b;
-            else if (dc < da && dc < db && dc < dd)
-                s = c;
-            else s = d;
+        //float u = 1.0f / 3;
+        //float v = 1.0f / 3;
+        //float w = 1.0f / 3;
+
+        // Search iterations for x1
+        for (int i = 0; i < n; i++) {
+            if (method == Method.FrankWolfe) {
+                Vector3 gradient = GetFieldGradient(x1);
+                float da = Vector3.Dot(a, gradient);
+                float db = Vector3.Dot(b, gradient);
+                float dc = Vector3.Dot(c, gradient);
+                    
+                Vector3 s;
+
+                if (da < db && da < dc) 
+                    s = a;
+                else if (db < da && db < dc)
+                    s = b;
+                else s = c;
+                    
+                float gamma = 2.0f /((float)i + 2.0f);
+                    
+                x1 = x1 + gamma * (s - x1);
+            } else {
                 
-            float gamma = 0.3f *2.0f /((float) i + 2.0f);
+                Vector3 gradient = GetFieldGradient(x1);
+                float alpha = 0.05f;
                 
-            x = (1.0f - gamma) * x + gamma * s;
+                Vector3 p = x1 - alpha*gradient;
+
+                x1 = projectTri(a, b, c, p);
+            }
         }
 
-        if (target.tag == "Sphere") {
-            boundDistance = SDFCircle(x, false);
-        } else {
-            boundDistance = SDFCircle(x, true);
+        // Search iterations for x2
+        for (int i = 0; i < n; i++) {
+            if (method == Method.FrankWolfe) {
+                Vector3 gradient = GetFieldGradient(x2);
+                float db = Vector3.Dot(b, gradient);
+                float dc = Vector3.Dot(c, gradient);
+                float dd = Vector3.Dot(d, gradient);
+                    
+                Vector3 s;
+
+                if (db < dc && db < dd) 
+                    s = b;
+                else if (dc < db && dc < dd)
+                    s = c;
+                else s = d;
+                    
+                float gamma = 2.0f /((float) i + 2.0f);
+                    
+                x2 = (1.0f - gamma) * x2 + gamma * s;
+            } else {
+
+            }
         }
     }
 
     private void OnDrawGizmos() {
-        if (m_Started) {
-            localToWorld = transform.localToWorldMatrix;
-
-            m_MeshFilter = gameObject.GetComponent<MeshFilter>();
-            m_Mesh = m_MeshFilter.mesh;
-
+        if (Application.isPlaying) {
             Vector3[] m_Vertices = m_Mesh.vertices;
             int[] m_Triangles = m_Mesh.triangles;
 
-            if (debugVertices) {
-                //
-                Vector3 position = Matrix4x4.TRS(transform.position, transform.rotation, transform.lossyScale) * m_Vertices[0];
-                position += transform.position;
-                Gizmos.color = Color.blue;
-                Gizmos.DrawWireCube(position, 0.05f * Vector3.one);
-                //
-                position = Matrix4x4.TRS(transform.position, transform.rotation, transform.lossyScale) * m_Vertices[1];
-                position += transform.position;
-                Gizmos.color = Color.blue;
-                Gizmos.DrawWireCube(position, 0.05f * Vector3.one);
-                //
-                position = Matrix4x4.TRS(transform.position, transform.rotation, transform.lossyScale) * m_Vertices[2];
-                position += transform.position;
-                Gizmos.color = Color.blue;
-                Gizmos.DrawWireCube(position, 0.05f * Vector3.one);
-                //
-                position = Matrix4x4.TRS(transform.position, transform.rotation, transform.lossyScale) * m_Vertices[3];
-                position += transform.position;
-                Gizmos.color = Color.blue;
-                Gizmos.DrawWireCube(position, 0.05f * Vector3.one);
-            }
+            Vector3 a = transform.TransformPoint(m_Vertices[0]);
+            Vector3 b = transform.TransformPoint(m_Vertices[1]);
+            Vector3 c = transform.TransformPoint(m_Vertices[2]);
+            Vector3 d = transform.TransformPoint(m_Vertices[3]);
             
-            //
-            if (boundDistance < threshold)  {
-                Gizmos.color = Color.red;
-                Gizmos.DrawSphere(x, 0.03f);
-            }
+            Gizmos.color = Color.blue;
+            Gizmos.DrawWireCube(a, 0.3f * Vector3.one);
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireCube(b, 0.3f * Vector3.one);
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireCube(c, 0.3f * Vector3.one);
+            Gizmos.color = Color.red;
+            Gizmos.DrawSphere(x1, 0.3f);
+            Gizmos.color = Color.red;
+            //Gizmos.DrawSphere(x2, 0.3f);
         }
+    }
+
+    private Vector3 projectTri(Vector3 a, Vector3 b, Vector3 c, Vector3 p) {
+        
+        float snom = Vector3.Dot(p - a, b - a), sdenom = Vector3.Dot(p - b, a - b);
+        float tnom = Vector3.Dot(p - a, c - a), tdenom = Vector3.Dot(p - c, a - c);
+
+        if (snom <= 0.0f && tnom <= 0.0f) return a;
+
+        float unom = Vector3.Dot(p - b, c - b), udenom = Vector3.Dot(p - c, b - c);
+
+        if (sdenom <= 0.0f && unom <= 0.0f)	return b;
+	    if (tdenom <= 0.0f && udenom <= 0.0f)	return c;
+
+        Vector3 n = Vector3.Cross(b - a, c - a);
+
+        float vc = Vector3.Dot(n, Vector3.Cross(a - p, b - p));
+        if (vc <= 0.0f && snom >= 0.0f && sdenom >= 0.0f) return a + snom / (snom + sdenom) * (b - a);
+
+        float va = Vector3.Dot(n, Vector3.Cross(b - p, c - p));
+        if (va <= 0.0f && unom >= 0.0f && udenom >= 0.0f) return b + unom / (unom + udenom) * (c - b);
+
+        float vb = Vector3.Dot(n, Vector3.Cross(c - p, a - p));
+        if (vb <= 0.0f && tnom >= 0.0f && tdenom >= 0.0f) return a + tnom / (tnom + tdenom) * (c - a);
+
+        float u = va / (va + vb + vc);
+        float v = vb / (va + vb + vc);
+        float w = 1.0f - u - v;
+        return u*a + v*b + w*c;
     }
 }

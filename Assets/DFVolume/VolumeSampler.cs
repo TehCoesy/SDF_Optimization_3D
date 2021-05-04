@@ -59,7 +59,7 @@ namespace DFVolume
                         var pt = new Vector3(x, y, z) * _extent;
                         pt = transform.TransformPoint(pt);
 
-                        var dist = 1.0f;
+                        float dist = 0.0f;
 
                         if (collider) {
                             if (IsInCollider(collider, pt)) {
