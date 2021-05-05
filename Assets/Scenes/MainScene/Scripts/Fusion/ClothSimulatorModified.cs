@@ -147,8 +147,6 @@ public class ClothSimulatorModified : MonoBehaviour {
         }
 
         mySampler = CustomSampler.Create("mySampler");
-
-        Debug.Log("Triangles: " + triangles.Length);
     }
     
 
@@ -546,25 +544,6 @@ public class ClothSimulatorModified : MonoBehaviour {
                         
                     }
                 }
-                
-                /*
-                else if (targetCollider.GetType() == typeof(MeshCollider)) {
-                    int[] triangleIndices = { triangles[i].vertices[0], triangles[i].vertices[1], triangles[i].vertices[2]};
-                    Vector3 p = projectedX[i] - target.transform.position + new Vector3(extent, extent, extent);
-
-                    p /= extent;
-                    
-                    var x = (int) (p.x * (resolution - 1)) / 2 + 1;
-                    var y = (int) (p.y * (resolution - 1)) / 2 + 1;
-                    var z = (int) (p.z * (resolution - 1)) / 2 + 1;
-
-                    Color gradient = targetVolume.texture.GetPixel(x, y, z);
-                    Vector3 normal = new Vector3(gradient.r, gradient.g, gradient.b).normalized;
-                    if (gradient.a < 0.0f) {
-                        collisionConstraints.Add(new NewMeshCollisionConstraint(i, normal, Mathf.Abs(gradient.a), triangleIndices));
-                    }
-                }
-                */
                 
                 if (collided) { 
                     ClothFrictionCollider frictionCollider = targetCollider.GetComponent<ClothFrictionCollider>();
