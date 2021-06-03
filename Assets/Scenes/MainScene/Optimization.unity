@@ -235,7 +235,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   target: {fileID: 722461892}
   n: 16
-  method: 1
+  method: 0
 --- !u!1001 &544239453
 PrefabInstance:
   m_ObjectHideFlags: 0

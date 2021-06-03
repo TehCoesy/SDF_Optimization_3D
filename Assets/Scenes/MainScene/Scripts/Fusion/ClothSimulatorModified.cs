@@ -6,7 +6,7 @@ using UnityEngine.Profiling;
 using DFVolume;
 
 public enum CollisionMode { PointSamplingActivation, ClosestPoint, None }
-public enum OptimizationMode { GradientDescent, FrankWolfe }
+public enum OptimizationMode { FrankWolfe, GradientDescent }
 
 public class ClothSimulatorModified : MonoBehaviour {
     [Header("Simulation Parameters")]
@@ -40,6 +40,7 @@ public class ClothSimulatorModified : MonoBehaviour {
 
     // [TODO]: Setup multi-target
     [Header("Collision")]
+    public OptimizationMode optimizationMode = OptimizationMode.FrankWolfe;
     public CollisionMode collisionMode = CollisionMode.PointSamplingActivation;
     public GameObject target;
 
@@ -55,6 +56,17 @@ public class ClothSimulatorModified : MonoBehaviour {
     private List<Constraint> collisionConstraints = new List<Constraint>();
     private List<PointConstraint> pointConstraints = new List<PointConstraint>();
     private int numParticles;
+
+    // Simulation controls
+    public bool isPlaying = false;
+    private bool isResetting = false;
+
+    // Starting configuration
+    private Vector3[] originalPositions;
+    private Vector3[] originalVelocities;
+    private Vector3[] originalProjPositions;
+    private float[] originalFrictions;
+    private Vector3 originalTransform;
 
     // Unity data
     private Mesh mesh;
@@ -86,23 +98,40 @@ public class ClothSimulatorModified : MonoBehaviour {
         }
         mesh.MarkDynamic();
 
+        // Initialize data
         numParticles = mesh.vertexCount;
         Vector3[] baseVertices = mesh.vertices;
+        originalTransform = transform.position;
 
         positions = new Vector3[numParticles];
+        originalPositions = new Vector3[numParticles];
+
         projectedPositions = new Vector3[numParticles];
+        originalProjPositions = new Vector3[numParticles];
+
         velocities = new Vector3[numParticles];
+        originalVelocities = new Vector3[numParticles];
+
         frictions = new float[numParticles];
+        originalFrictions = new float[numParticles];
 
         // Create a new mesh for the opposite side
         CreateBackSide();
 
         // Initialize position, velocity and weight
         for (int i = 0; i < numParticles; i++) {
+            //
             positions[i] = baseVertices[i];
+            originalPositions[i] = positions[i];
+            //
             projectedPositions[i] = positions[i];
+            originalProjPositions[i] = projectedPositions[i];
+            //
             velocities[i] = Vector3.zero;
+            originalVelocities[i] = velocities[i];
+            //
             frictions[i] = 1;
+            originalFrictions[i] = 1;
         }
         invMass = 1.0f / vertexMass;
 
@@ -124,12 +153,11 @@ public class ClothSimulatorModified : MonoBehaviour {
             positions[i] = transform.TransformPoint(positions[i]);
         }
 
-        // add constraints
+        // Add constraints
         AddDistanceConstraints();
         AddPointConstraints();
         AddBendingConstraints();
 
-        // modify positions to world coordinates before calculating constraint restlengths
         for (int i = 0; i < numParticles; i++) {
             positions[i] = transform.InverseTransformPoint(positions[i]);
         }
@@ -151,6 +179,37 @@ public class ClothSimulatorModified : MonoBehaviour {
     
 
     private void Update () {
+        if (isResetting) {
+            isResetting = false;
+            
+            for (int i = 0; i < numParticles; i++) {
+                positions[i] = originalPositions[i];
+                projectedPositions[i] = originalProjPositions[i];
+                velocities[i] = originalVelocities[i];
+                frictions[i] = originalFrictions[i];
+            }
+
+            transform.position = originalTransform;
+
+            // Modify positions to world coordinates before calculating constraint restlengths
+            for (int i = 0; i < numParticles; i++) {
+                positions[i] = transform.TransformPoint(positions[i]);
+            }
+
+            // Add constraints
+            constraints.Clear();
+            pointConstraints.Clear();
+            collisionConstraints.Clear();
+
+            AddDistanceConstraints();
+            AddPointConstraints();
+            AddBendingConstraints();
+
+            for (int i = 0; i < numParticles; i++) {
+                positions[i] = transform.InverseTransformPoint(positions[i]);
+            }
+        }
+
         // Modify data to world coordinates
         for (int i = 0; i < numParticles; i++) {
             positions[i] = transform.TransformPoint(positions[i]);
@@ -169,6 +228,8 @@ public class ClothSimulatorModified : MonoBehaviour {
             float dt = Mathf.Min(nextFrameTime, timestep);
             nextFrameTime -= dt;
             iter++;
+
+            if (!isPlaying) continue;
 
             // Step 1: apply external forces
             ApplyExternalForce(gravity, dt);
@@ -227,7 +288,7 @@ public class ClothSimulatorModified : MonoBehaviour {
             transform.position = newCenter;
         }
 
-        // update everything into Unity
+        // Update everything into Unity
         mesh.vertices = positions;
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
@@ -268,27 +329,65 @@ public class ClothSimulatorModified : MonoBehaviour {
 
             // Search iterations
             for (int k = 0; k < 32; k++) {
-                // Frank - wolfe
-                Vector3 gradient = GetGradient(projectedX[i]);
-                float da = Vector3.Dot(a, gradient);
-                float db = Vector3.Dot(b, gradient);
-                float dc = Vector3.Dot(c, gradient);
-                    
-                Vector3 s;
+                if (optimizationMode == OptimizationMode.FrankWolfe) {
+                    Vector3 gradient = GetGradient(projectedX[i]);
+                    float da = Vector3.Dot(a, gradient);
+                    float db = Vector3.Dot(b, gradient);
+                    float dc = Vector3.Dot(c, gradient);
+                        
+                    Vector3 s;
 
-                if (da < db && da < dc) 
-                    s = a;
-                else if (db < da && db < dc)
-                    s = b;
-                else s = c;
-                    
-                float gamma = 2.0f /((float) i + 2.0f);
-                    
-                projectedX[i] = projectedX[i] + gamma * (projectedX[i] - s);
+                    if (da < db && da < dc) 
+                        s = a;
+                    else if (db < da && db < dc)
+                        s = b;
+                    else s = c;
+                        
+                    float gamma = 2.0f /((float) i + 2.0f);
+                        
+                    projectedX[i] = projectedX[i] + gamma * (projectedX[i] - s);
+                } else {
+                    Vector3 gradient = GetGradient(projectedX[i]);
+                    float alpha = 0.05f;
+
+                    Vector3 newp = projectedX[i] - alpha*gradient;
+
+                    projectedX[i] = projectTri(a, b, c, newp);
+                }
             }
 
             distances[i] = GetField(projectedX[i]);
         }
+    }
+
+
+    private Vector3 projectTri(Vector3 a, Vector3 b, Vector3 c, Vector3 p) {
+        
+        float snom = Vector3.Dot(p - a, b - a), sdenom = Vector3.Dot(p - b, a - b);
+        float tnom = Vector3.Dot(p - a, c - a), tdenom = Vector3.Dot(p - c, a - c);
+
+        if (snom <= 0.0f && tnom <= 0.0f) return a;
+
+        float unom = Vector3.Dot(p - b, c - b), udenom = Vector3.Dot(p - c, b - c);
+
+        if (sdenom <= 0.0f && unom <= 0.0f)	return b;
+	    if (tdenom <= 0.0f && udenom <= 0.0f)	return c;
+
+        Vector3 n = Vector3.Cross(b - a, c - a);
+
+        float vc = Vector3.Dot(n, Vector3.Cross(a - p, b - p));
+        if (vc <= 0.0f && snom >= 0.0f && sdenom >= 0.0f) return a + snom / (snom + sdenom) * (b - a);
+
+        float va = Vector3.Dot(n, Vector3.Cross(b - p, c - p));
+        if (va <= 0.0f && unom >= 0.0f && udenom >= 0.0f) return b + unom / (unom + udenom) * (c - b);
+
+        float vb = Vector3.Dot(n, Vector3.Cross(c - p, a - p));
+        if (vb <= 0.0f && tnom >= 0.0f && tdenom >= 0.0f) return a + tnom / (tnom + tdenom) * (c - a);
+
+        float u = va / (va + vb + vc);
+        float v = vb / (va + vb + vc);
+        float w = 1.0f - u - v;
+        return u*a + v*b + w*c;
     }
 
 
@@ -755,6 +854,21 @@ public class ClothSimulatorModified : MonoBehaviour {
                 //                            Mathf.Abs(velocities[i][2]) < 0.2f ? 0 : velocities[i][2]);
             }
         }
+    }
+
+
+    public void playSimulation() {
+        isPlaying = true;
+    }
+
+
+    public void pauseSimulation() {
+        isPlaying = false;
+    }
+
+
+    public void resetSimulation() {
+        isResetting = true;
     }
 
     // Distance to a sphere's surface

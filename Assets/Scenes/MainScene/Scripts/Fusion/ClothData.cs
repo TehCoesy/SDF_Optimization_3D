@@ -2,11 +2,6 @@
 using System.Linq;
 using System.Collections.Generic;
 
-
-// ******************************************************
-// *********** CPU side data structures *****************
-// ******************************************************
-
 public class Triangle {
     public int[] vertices;
 
@@ -41,42 +36,3 @@ public class EdgeComparer : EqualityComparer<Edge> {
 public enum DampingMethod { noDamping, simpleDamping, smartDamping }
 public enum BendingMethod { DihedralBending, isometricBending }
 public enum PointConstraintType { none, topRow, topCorners, leftRow, leftCorners }
-
-
-// ******************************************************
-// *********** GPU side data structures *****************
-// ******************************************************
-
-struct UInt3Struct {
-    public uint deltaXInt;
-    public uint deltaYInt;
-    public uint deltaZInt;
-}
-
-struct EdgeStruct {
-    public int startIndex;
-    public int endIndex;
-};
-
-struct DistanceConstraintStruct {
-    public EdgeStruct edge;
-    public float restLength;
-};
-
-struct BendingConstraintStruct {
-    public int index0;
-    public int index1;
-    public int index2;
-    public int index3;
-    public float restAngle;
-};
-
-struct CollidableSphereStruct {
-    public Vector3 center;
-    public float radius;
-}
-
-struct CollidableCubeStruct {
-    public Vector3 center;
-    public Vector3 extent;
-}

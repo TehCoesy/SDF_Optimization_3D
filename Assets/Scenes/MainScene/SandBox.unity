@@ -350,6 +350,7 @@ MonoBehaviour:
   dampingStiffness: 0.02
   pointConstraintType: 2
   pointConstraintCustomIndices: 
+  optimizationMode: 0
   collisionMode: 1
   target: {fileID: 1533328308}
 --- !u!1 &963194225
@@ -734,7 +735,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 563e711ca6c38504c94263bffdd6bcc6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  volume: {fileID: 11400000, guid: a0be021a4491949438ec9e4d620e367b, type: 2}
+  volume: {fileID: 0}
 --- !u!33 &2485618492035230006
 MeshFilter:
   m_ObjectHideFlags: 0
